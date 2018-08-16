@@ -3,6 +3,7 @@ package com.codingame.locam;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -22,7 +23,7 @@ class Player {
         this.me = new Actor();
         this.opponent = new Actor();
         this.board = new Board();
-        this.ai = new ArtificialIntelligence();
+        this.ai = new ArtificialIntelligence(gameSupport);
         this.support = gameSupport;
         this.is = is;
         this.ps = ps;
@@ -37,14 +38,15 @@ class Player {
         try {
             Scanner s = new Scanner(this.is);
             // game loop
+            List<Card> inPlay = new ArrayList<>();
+            Action action;
+            ArtificialIntelligence ai = new ArtificialIntelligence(this.support);
             while (true) {
-                System.out.println("Reading line");
                 me.initialize(s.nextInt(), s.nextInt(), s.nextInt(), s.nextInt());
                 opponent.initialize(s.nextInt(), s.nextInt(), s.nextInt(), s.nextInt());
-                System.out.println("In round");
                 opponentHand = s.nextInt();
                 int cardCount = s.nextInt();
-                board.clear();
+                inPlay.clear();
                 for (int i = 0; i < cardCount; i++) {
                     int number = s.nextInt();
                     int id = s.nextInt();
@@ -57,46 +59,165 @@ class Player {
                     int playerHp = s.nextInt();
                     int enemyHp = s.nextInt();
                     int draw = s.nextInt();
-                    board.add(location, CardFactory.createCard(type, number, id, cost, attack, defense, abilities, playerHp, enemyHp, draw));
+                    inPlay.add(CardFactory.createCard(type, number, id, location, cost, attack, defense, abilities, playerHp, enemyHp, draw));
+                    if(board.phase != Board.PHASE_DRAFT) {
+                        System.err.println("Card: #" + number + " id:" + id + " loc:" + location + " cost:" + cost + " atk:" + attack + " def:" + defense);
+                    }
                 }
 
+                if(board.phase == Board.PHASE_DRAFT) {
+                    action = ai.draftCard(inPlay);
+                    board.add(Board.LOCATION_PLAYER_SIDE, inPlay.get(((PickAction) action).card));
+                } else {
+                    board.clear();
+                    for(Card c: inPlay) {
+                        board.add(c.location, c);
+                    }
+                    action = ai.play(board, me);
+                }
+
+                if(board.deck.size() == support.deckSize() && board.phase == Board.PHASE_DRAFT) {
+                    board.phase = Board.PHASE_BATTLE;
+                }
                 // Write an action using System.out.println()
                 // To debug: System.err.println("Debug messages...");
 
+                ps.println(action.toString());
 //            System.out.println("PASS");
-                break;
             }
         } catch (Exception e) {
             System.err.println(e);
         }
     }
 
+    static class ArtificialIntelligence {
+        private final GameSupport support;
+        public List<LinkedCards> linkedCards = new ArrayList<>();
+        double costScore = 0.0, attackScore = 0.0, defenseScore = 0.0;
+        int deckCount = 0;
+
+        public ArtificialIntelligence(GameSupport support) {
+            this.support = support;
+        }
+
+        public Action draftCard(List<Card> options) {
+            // nice and simple for now - highest attack per cost
+            double maxScore = 0.0;
+            double maxDefense = 0.0;
+            int index = -1;
+            int i = 0;
+            double ratio, defRatio;
+            for(Card c: options) {
+                ratio = (double) c.attack / (double) c.cost;
+                defRatio = (double) c.defense / (double) c.cost;
+                if(ratio > maxScore) {
+                    maxScore = ratio;
+                    maxDefense = defRatio;
+                    index = i;
+                } else if(ratio == maxScore && defRatio > maxDefense) {
+                    maxDefense = defRatio;
+                    index = i;
+                }
+                ++i;
+            }
+            return new PickAction(index);
+        }
+
+        public Action play(Board board, Actor actor) {
+            int mana = actor.mana;
+            Action a;
+            MultiAction ma = null;
+            // attack
+            List<Card> sortedEnemies = new ArrayList<>(board.opponent);
+            System.err.println("Sorted attacking enemies: " + sortedEnemies.size());
+            sortedEnemies.sort((o1, o2) -> {
+                int cmp = Integer.compare(o2.attack, o1.attack);
+                return cmp != 0 ? cmp : Integer.compare(o1.defense, o2.defense);
+            });
+            List<Card> sortedFriends = new ArrayList<>(board.deck);
+            System.err.println("Sorted attacking friends: " + sortedFriends.size());
+            sortedFriends.sort((o1, o2) -> Integer.compare(o2.attack, o1.attack));
+            Card friend, enemy;
+            while(sortedFriends.size() > 0 && sortedEnemies.size() > 0) {
+                enemy = sortedEnemies.remove(0);
+                System.err.println("Enemy: " + enemy.cost + " " + enemy.attack + " " + enemy.defense);
+                for(int i = 0; i < sortedFriends.size(); ++i) {
+                    friend = sortedFriends.get(i);
+                    a = null;
+                    if(friend.attack <= enemy.defense) {
+                        a = new AttackAction(friend.id, enemy.id);
+                    } else if(i == sortedFriends.size() - 1) {
+                        a = new AttackAction(friend.id, enemy.id);
+                    }
+                    if(a != null) {
+                        if(ma == null) {
+                            ma = new MultiAction(a);
+                        } else {
+                            ma.actions.add(a);
+                        }
+                        enemy.defense -= friend.attack;
+                        sortedFriends.remove(i--);
+                    }
+                }
+            }
+            System.err.println("Sorted remaining attacking friends: " + sortedFriends.size());
+            while(sortedFriends.size() > 0) {
+                friend = sortedFriends.remove(0);
+                a = new AttackAction(friend.id, -1);
+                if(ma == null) {
+                    ma = new MultiAction(a);
+                } else {
+                    ma.actions.add(a);
+                }
+            }
+            sortedFriends = new ArrayList<>(board.hand);
+            sortedFriends.sort((o1, o2) -> Double.compare((double) o2.attack / (double) o2.cost, (double) o1.attack / (double) o1.cost));
+            System.err.println("Sorted summonable friends: " + sortedFriends.size());
+            int total = board.deck.size();
+            System.err.println("Mana: " + mana);
+            while (!sortedFriends.isEmpty()) {
+                friend = sortedFriends.remove(0);
+                if(friend.cost <= mana) {
+                    a = new SummonAction(friend.id);
+                    mana -= friend.cost;
+                    if(ma == null) {
+                        ma = new MultiAction(a);
+                    } else {
+                        ma.actions.add(a);
+                    }
+                    ++total;
+                }
+                if(total >= support.maxCreatures()) {
+                    break;
+                }
+            }
+            if(ma == null) {
+                return PassAction.INSTANCE;
+            } else {
+                return ma;
+            }
+        }
+    }
+
     static class Board {
         static final int LOCATION_PLAYER_HAND = 0;
         static final int LOCATION_PLAYER_SIDE = 1;
-        static final int LOCATION_OPPONENT_SIDE = 2;
+        static final int LOCATION_OPPONENT_SIDE = -1;
         static final int PHASE_DRAFT = 0;
         static final int PHASE_BATTLE = 1;
-        Set<Card> opponent = new HashSet<>();
-        Set<Card> deck = new HashSet<>();
-        Set<Card> hand = new HashSet<>();
+        List<Card> opponent = new ArrayList<>();
+        List<Card> deck = new ArrayList<>();
+        List<Card> hand = new ArrayList<>();
         int phase = PHASE_DRAFT;
         int round = 0;
 
         public void add(int location, Card card) {
-            if(phase != PHASE_BATTLE) {
-                return;
-            }
             switch (location) {
                 case LOCATION_PLAYER_HAND:
-                    if(!hand.contains(card)) {
-                        hand.add(card);
-                    }
+                    hand.add(card);
                     break;
                 case LOCATION_PLAYER_SIDE:
-                    if(!deck.contains(card)) {
-                        deck.add(card);
-                    }
+                    deck.add(card);
                     break;
                 case LOCATION_OPPONENT_SIDE:
                     opponent.add(card);
@@ -115,6 +236,8 @@ class Player {
 
         public void clear() {
             this.opponent.clear();
+            this.hand.clear();
+            this.deck.clear();
         }
     }
 
@@ -138,32 +261,32 @@ class Player {
     }
 
     static class Creature extends Card {
-        public Creature(int number, int id, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
-            super(number, id, Card.TYPE_CREATURE, cost, attack, defense, abilities, playerHp, enemyHp, cardDraw);
+        public Creature(int number, int id, int location, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
+            super(number, id, Card.TYPE_CREATURE, location, cost, attack, defense, abilities, playerHp, enemyHp, cardDraw);
         }
     }
 
     static class ItemGreen extends Item {
-        public ItemGreen(int number, int id, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
-            super(number, id, Card.TYPE_ITEM_GREEN, cost, attack, defense, abilities, playerHp, enemyHp, cardDraw);
+        public ItemGreen(int number, int id, int location, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
+            super(number, id, Card.TYPE_ITEM_GREEN, location, cost, attack, defense, abilities, playerHp, enemyHp, cardDraw);
         }
     }
 
     static class ItemRed extends Item {
-        public ItemRed(int number, int id, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
-            super(number, id, Card.TYPE_ITEM_RED, cost, attack, defense, abilities, playerHp, enemyHp, cardDraw);
+        public ItemRed(int number, int id, int location, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
+            super(number, id, Card.TYPE_ITEM_RED, location, cost, attack, defense, abilities, playerHp, enemyHp, cardDraw);
         }
     }
 
     static class ItemBlue extends Item {
-        public ItemBlue(int number, int id, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
-            super(number, id, Card.TYPE_ITEM_BLUE, cost, attack, defense, abilities, playerHp, enemyHp, cardDraw);
+        public ItemBlue(int number, int id, int location, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
+            super(number, id, Card.TYPE_ITEM_BLUE, location, cost, attack, defense, abilities, playerHp, enemyHp, cardDraw);
         }
     }
 
     static abstract class Item extends Card {
-        public Item(int number, int id, int type, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
-            super(number, id, type, cost, attack, defense, abilities, playerHp, enemyHp, cardDraw);
+        public Item(int number, int id, int type, int location, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
+            super(number, id, type, location, cost, attack, defense, abilities, playerHp, enemyHp, cardDraw);
         }
     }
 
@@ -174,7 +297,7 @@ class Player {
         static final int TYPE_ITEM_BLUE = 3; // todo change to actual value
         int number;
         int id;
-        int location = Board.LOCATION_PLAYER_SIDE;
+        int location;
         int type;
         int cost;
         int attack;
@@ -184,10 +307,11 @@ class Player {
         int enemyHp;
         int cardDraw;
 
-        public Card(int number, int id, int type, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
+        public Card(int number, int id, int type, int location, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int cardDraw) {
             this.number = number;
             this.id = id;
             this.type = type;
+            this.location = location;
             this.cost = cost;
             this.attack = attack;
             this.defense = defense;
@@ -202,13 +326,12 @@ class Player {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             Card card = (Card) o;
-            return number == card.number &&
-                    id == card.id;
+            return id == card.id;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(number, id);
+            return Objects.hash(id);
         }
 
         @Override
@@ -220,16 +343,16 @@ class Player {
     }
 
     static class CardFactory {
-        public static Card createCard(int type, int number, int id, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int draw) {
+        public static Card createCard(int type, int number, int id, int location, int cost, int attack, int defense, String abilities, int playerHp, int enemyHp, int draw) {
             switch(type) {
                 case Card.TYPE_CREATURE:
-                    return new Creature(number, id, cost, attack, defense, abilities, playerHp, enemyHp, draw);
+                    return new Creature(number, id, location, cost, attack, defense, abilities, playerHp, enemyHp, draw);
                 case Card.TYPE_ITEM_GREEN:
-                    return new ItemGreen(number, id, cost, attack, defense, abilities, playerHp, enemyHp, draw);
+                    return new ItemGreen(number, id, location, cost, attack, defense, abilities, playerHp, enemyHp, draw);
                 case Card.TYPE_ITEM_RED:
-                    return new ItemRed(number, id, cost, attack, defense, abilities, playerHp, enemyHp, draw);
+                    return new ItemRed(number, id, location, cost, attack, defense, abilities, playerHp, enemyHp, draw);
                 case Card.TYPE_ITEM_BLUE:
-                    return new ItemBlue(number, id, cost, attack, defense, abilities, playerHp, enemyHp, draw);
+                    return new ItemBlue(number, id, location, cost, attack, defense, abilities, playerHp, enemyHp, draw);
                 default:
                     throw new RuntimeException("Unexpected card type: " + type);
             }
@@ -237,9 +360,10 @@ class Player {
     }
 
     static class PassAction implements Action {
+        public static final PassAction INSTANCE = new PassAction();
         @Override
-        public void execute() {
-            System.out.println("PASS");
+        public String toString() {
+            return "PASS";
         }
     }
 
@@ -251,8 +375,8 @@ class Player {
         }
 
         @Override
-        public void execute() {
-            System.out.println("PICK " + card);
+        public String toString() {
+            return "PICK " + card;
         }
     }
 
@@ -264,8 +388,8 @@ class Player {
         }
 
         @Override
-        public void execute() {
-            System.out.println("SUMMON " + id);
+        public String toString() {
+            return "SUMMON " + id;
         }
     }
 
@@ -278,18 +402,29 @@ class Player {
         }
 
         @Override
-        public void execute() {
-            System.out.println("ATTACK " + id1 + " " + id2);
+        public String toString() {
+            return "ATTACK " + id1 + " " + id2;
+        }
+    }
+
+    static class MultiAction implements Action {
+        private List<Action> actions = new ArrayList<>();
+
+        private MultiAction(Action first) {
+            this.actions.add(first);
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder(actions.get(0).toString());
+            for(int i = 1; i < actions.size(); ++i) {
+                sb.append(';').append(actions.get(i).toString());
+            }
+            return sb.toString();
         }
     }
 
     interface Action {
-        void execute();
-    }
-
-    static class ArtificialIntelligence {
-        public List<LinkedCards> linkedCards = new ArrayList<>();
-
     }
 
     // represents the possible cards drawn by the opponent in the draft
@@ -328,6 +463,12 @@ class Player {
         int draftCount();
 
         boolean uniqueCards();
+
+        boolean affectPlayerHealth();
+
+        boolean affectOpponentHealth();
+
+        boolean drawCardsActive();
     }
 
     static abstract class StandardGameSupport implements GameSupport {
@@ -390,12 +531,49 @@ class Player {
         public boolean uniqueCards() {
             return true;
         }
+
+        @Override
+        public boolean affectPlayerHealth() {
+            return false;
+        }
+
+        @Override
+        public boolean affectOpponentHealth() {
+            return false;
+        }
+
+        @Override
+        public boolean drawCardsActive() {
+            return false;
+        }
     }
 
     static class Wood3GameSupport extends StandardGameSupport {
     }
 
-    public static final Card[] LISTING = {
+    static class Wood2GameSupport extends StandardGameSupport {
+        @Override
+        public boolean affectPlayerHealth() {
+            return true;
+        }
+
+        @Override
+        public boolean affectOpponentHealth() {
+            return true;
+        }
+
+        @Override
+        public boolean drawCardsActive() {
+            return true;
+        }
+
+        @Override
+        public String allowedAbilities() {
+            return "BC-G--";
+        }
+    }
+
+/*    public static final Card[] LISTING = {
             new Creature(  1, -1,  1,  2,  1, "------",  1,  0, 0),
             new Creature(  2, -1,  1,  1,  2, "------",  0, -1, 0),
             new Creature(  3, -1,  1,  2,  2, "------",  0,  0, 0),
@@ -556,5 +734,5 @@ class Player {
             new ItemBlue(158, -1, 3, 0, -4, "------", 0,  0, 0),
             new ItemBlue(159, -1, 4, 0, -3, "------", 3,  0, 0),
             new ItemBlue(160, -1, 2, 0,  0, "------", 2, -2, 0)
-    };
+    };*/
 }

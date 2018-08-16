@@ -37,10 +37,8 @@ public class Engine {
 
         Random random = new Random(System.currentTimeMillis());
 
-        System.out.println("Before thread start");
         new Thread(client1::run).start();
         new Thread(client2::run).start();
-        System.out.println("After thread start");
 
         int phase = Player.Board.PHASE_DRAFT;
         List<Player.Card> availables = new ArrayList<>();
@@ -58,12 +56,10 @@ public class Engine {
         }
 //        for(int i = 0; i < support.deckSize(); ++i) {
 //
-        System.out.println("Printing players");
         data1.println(p1.toString());
         data1.println(p2.toString());
         data2.println(p1.toString());
         data2.println(p2.toString());
-        System.out.println("Printed players");
 //        data1.flush();
 //        data2.flush();
         data1.println(0);
