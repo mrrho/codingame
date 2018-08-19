@@ -243,8 +243,8 @@ class Player {
         Action action;
         List<Card> inPlay = new ArrayList<>();
         System.err.println("Player reading cards");
-        me.initialize(s.nextInt(), s.nextInt(), s.nextInt(), s.nextInt());
-        opponent.initialize(s.nextInt(), s.nextInt(), s.nextInt(), s.nextInt());
+        me.initialize(s.nextInt(), s.nextInt(), s.nextInt(), s.nextInt(), support);
+        opponent.initialize(s.nextInt(), s.nextInt(), s.nextInt(), s.nextInt(), support);
         opponentHand = s.nextInt();
         int cardCount = s.nextInt();
         inPlay.clear();
@@ -285,6 +285,7 @@ class Player {
         // Write an action using System.out.println()
         // To debug: System.err.println("Debug messages...");
 
+        System.err.println(action.toString());
         ps.println(action.toString());
         ps.flush();
     }
@@ -484,17 +485,36 @@ class Player {
         int mana;
         int deck;
         int runes;
+        int lowestHealth;
+        GameSupport support;
 
-        public void initialize(int health, int mana, int deck, int runes) {
+        public void initialize(int health, int mana, int deck, int runes, GameSupport support) {
             this.health = health;
             this.mana = mana;
             this.deck = deck;
             this.runes = runes;
+            this.lowestHealth = health;
+            this.support = support;
         }
 
         @Override
         public String toString() {
             return "" + health + " " + mana + " " + deck + " " + runes;
+        }
+
+        public void takeDamage(int attack) {
+            int h1 = health;
+            int h2 = health - attack;
+            if(h2 < lowestHealth) {
+                int[] thresholds = support.playerRunes();
+                for(int i = 0; i < thresholds.length; ++i) {
+                    if(thresholds[i] > h2 && thresholds[i] <= lowestHealth) {
+                        ++this.runes;
+                    }
+                }
+                lowestHealth = h2;
+            }
+            health = h2;
         }
     }
 

@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Random;
 import java.util.Scanner;
 import java.util.Set;
-import java.util.concurrent.Semaphore;
 
 public class Engine {
     public static void main(String[] args) throws InterruptedException {
@@ -34,9 +33,9 @@ public class Engine {
                     input2 = new Scanner(out2.getInputStream());
 
             Player.Actor p1 = new Player.Actor();
-            p1.initialize(support.startingHealth(), 0, 0, 0);
+            p1.initialize(support.startingHealth(), 0, 0, 0, support);
             Player.Actor p2 = new Player.Actor();
-            p2.initialize(support.startingHealth(), 0, 0, 0);
+            p2.initialize(support.startingHealth(), 0, 0, 0, support);
 
             Random random = new Random(System.currentTimeMillis());
 
@@ -100,7 +99,7 @@ public class Engine {
             List<Player.Card> side1 = new ArrayList<>();
             List<Player.Card> side2 = new ArrayList<>();
             int maxMana = support.startingMana();
-            for(;;) {
+            for (; ; ) {
                 p1.mana = maxMana;
                 p2.mana = maxMana;
                 data1.println(p1.toString());
@@ -111,17 +110,17 @@ public class Engine {
                 data2.println(hand1.size());
                 data1.println(hand1.size() + side1.size() + side2.size());
                 data2.println(hand2.size() + side1.size() + side2.size());
-                for (Player.Card c: hand1) {
+                for (Player.Card c : hand1) {
                     data1.println(String.format("%d %d 0 %d %d %d %d %s %d %d %d",
                             c.number, c.id, c.type, c.cost, c.attack, c.defense,
                             c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
                 }
-                for (Player.Card c: hand2) {
+                for (Player.Card c : hand2) {
                     data2.println(String.format("%d %d 0 %d %d %d %d %s %d %d %d",
                             c.number, c.id, c.type, c.cost, c.attack, c.defense,
                             c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
                 }
-                for(Player.Card c: side1) {
+                for (Player.Card c : side1) {
                     data1.println(String.format("%d %d 1 %d %d %d %d %s %d %d %d",
                             c.number, c.id, c.type, c.cost, c.attack, c.defense,
                             c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
@@ -129,7 +128,7 @@ public class Engine {
                             c.number, c.id, c.type, c.cost, c.attack, c.defense,
                             c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
                 }
-                for(Player.Card c: side2) {
+                for (Player.Card c : side2) {
                     data2.println(String.format("%d %d 1 %d %d %d %d %s %d %d %d",
                             c.number, c.id, c.type, c.cost, c.attack, c.defense,
                             c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
@@ -141,7 +140,7 @@ public class Engine {
                 client2.gameTurn();
                 processBattleRound(input1, p1, p2, hand1, side1, deck1, side2, support);
                 processBattleRound(input2, p1, p2, hand2, side2, deck2, side1, support);
-                if(maxMana < support.maximumMana()) {
+                if (maxMana < support.maximumMana()) {
                     p1.mana = maxMana;
                     p2.mana = maxMana;
                 }
@@ -156,49 +155,108 @@ public class Engine {
                                     List<Player.Card> side, List<Player.Card> deck,
                                     List<Player.Card> other, Player.GameSupport support) {
         String line = scanner.nextLine();
-        if(line.trim().isEmpty()) {
+        if (line.trim().isEmpty()) {
             line = scanner.nextLine();
         }
         String[] commands = line.toLowerCase().split("\\s+;\\s+");
         String[] tokens;
         int id1, id2;
         List<Player.Card> summoned = new ArrayList<>();
-        List<Player.Card> enemyWardsUsed = new ArrayList<>();
-        for(String command: commands) {
+        for (String command : commands) {
             if (command.startsWith("summon")) {
                 tokens = command.split("\\s+", 3);
-                if(tokens.length < 2) {
-                    throw new IllegalArgumentException("SUMMON requires id");
+                if (tokens.length < 2) {
+                    System.err.println("Malformed summon (SUMMON id): " + command);
+                    continue;
                 }
                 id1 = Integer.parseInt(tokens[1]);
-                for(Player.Card c: hand) {
-                    if(c.id == id1 && player1.mana >= c.cost && countSideCreatures(side) < support.maxCreatures()) {
+                for(int i = 0; i < hand.size(); ++i) {
+                    Player.Card c = hand.get(i);
+                    if (c.id == id1 && player1.mana >= c.cost && countSideCreatures(side) < support.maxCreatures()) {
                         player1.mana -= c.cost;
                         side.add(c);
                         hand.remove(c);
-                        if(!c.hasAbility("C")) {
+                        if (!hasAbility(support.allowedAbilities(), "C") || !c.hasAbility("C")) {
                             summoned.add(c);
                         }
-                    } else if(c.id == id1) {
+                        break;
+                    } else if (c.id == id1) {
                         System.err.println("Could not summon creature " + id1 + " due to constraints");
-                        if(player1.mana < c.cost) {
+                        if (player1.mana < c.cost) {
                             System.err.println("Mana too low: " + c.cost + " > " + player1.mana);
-                        } else if(countSideCreatures(side) >= support.maxCreatures()) {
+                        } else if (countSideCreatures(side) >= support.maxCreatures()) {
                             System.err.println("Maximum creatures (" + support.maxCreatures() + ") already summoned");
                         }
+                        break;
                     }
                 }
-                if(tokens.length > 2) {
+                if (tokens.length > 2) {
                     System.err.println(tokens[2]);
                 }
             } else if (command.startsWith("attack")) {
-
+                tokens = command.split("\\s+", 4);
+                if (tokens.length < 3) {
+                    System.err.println("Malformed attack (ATTACK id1 id2|-1): " + command);
+                    continue;
+                }
+                id1 = Integer.parseInt(tokens[1]);
+                id2 = Integer.parseInt(tokens[2]);
+                Player.Card o;
+                for (Player.Card c : side) {
+                    if (c.id == id1 && c.type == Player.Card.TYPE_CREATURE && !summoned.contains(c)) {
+                        o = fetchOpponent(id2, other);
+                        if (hasAbility(support.allowedAbilities(), "G") && opponentHasGuards(other) && !hasAbility(o.abilities, "G")) {
+                            System.err.println("Opponent has live Guard creature(s) in play but one of them wasn't attacked");
+                            continue;
+                        }
+                        if (o == null) {
+                            if (id2 == -1) {
+                                System.err.println("Opponent hit: " + c.attack + ", " + player2.health + " hp left");
+                                if(c.hasAbility("D")) {
+                                    System.err.println("" + c.attack + " drained hp added to player");
+                                    player1.health += c.attack;
+                                }
+                                player2.takeDamage(c.attack);
+                            } else {
+                                System.err.println("Invalid attack target id: " + id2);
+                            }
+                        } else if (o.hasAbility("W")) {
+                            System.err.println("Creature " + id2 + " ward broken!");
+                            o.abilities = o.abilities.substring(0, 5) + "-";
+                        } else {
+                            if(c.hasAbility("D")) {
+                                System.err.println("" + (c.attack > o.defense ? o.defense : c.attack) + " drained hp added to player");
+                                player1.health += c.attack > o.defense ? o.defense : c.attack;
+                            }
+                            if(c.hasAbility("L")) {
+                                if(c.hasAbility("B")) {
+                                    if(c.attack > o.defense) {
+                                        System.err.println("Breakthrough hit opponent for " + (c.attack - o.defense) + " hp");
+                                        player2.takeDamage(c.attack - o.defense);
+                                    }
+                                }
+                                System.err.println("Creature " + id2 + " hit lethally for " + o.defense + " hp damage");
+                                o.defense = 0;
+                            } else {
+                                System.err.println("Creature " + id2 + " hit for " + (c.attack > o.defense ? o.defense : c.attack) + " hp damage");
+                                o.defense -= c.attack > o.defense ? o.defense : c.attack;
+                            }
+                        }
+                    } else {
+                        System.err.println("Could not fulfil attack command: " + command);
+                        if (c.type != Player.Card.TYPE_CREATURE) {
+                            System.err.println("Card specified in attack is not a creature");
+                        } else if (summoned.contains(c)) {
+                            System.err.println("Card specified was summoned this turn and doesn't have Charge");
+                        }
+                    }
+                }
             } else if (command.startsWith("use")) {
 
             } else if (command.startsWith("pass")) {
                 // nothing to do
                 break;
-            } else if(command.trim().isEmpty()) {
+            } else if (command.trim().isEmpty()) {
                 throw new IllegalArgumentException("No command specified - use pass");
             } else {
                 throw new IllegalArgumentException("Invalid command: " + command);
@@ -206,9 +264,31 @@ public class Engine {
         }
     }
 
+    private boolean opponentHasGuards(List<Player.Card> other) {
+        for (Player.Card o : other) {
+            if (o.defense > 0 && hasAbility(o.abilities, "G")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasAbility(String abilities, String ability) {
+        return abilities.contains(ability);
+    }
+
+    private Player.Card fetchOpponent(int id, List<Player.Card> other) {
+        for (Player.Card o : other) {
+            if (o.id == id) {
+                return o;
+            }
+        }
+        return null;
+    }
+
     private int countSideCreatures(List<Player.Card> side) {
         int n = 0;
-        for(Player.Card c: side) {
+        for (Player.Card c : side) {
             n += c.type == Player.Card.TYPE_CREATURE ? 1 : 0;
         }
         return n;
