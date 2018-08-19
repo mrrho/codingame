@@ -99,7 +99,10 @@ public class Engine {
             // sideX are the cards in play
             List<Player.Card> side1 = new ArrayList<>();
             List<Player.Card> side2 = new ArrayList<>();
+            int maxMana = support.startingMana();
             for(;;) {
+                p1.mana = maxMana;
+                p2.mana = maxMana;
                 data1.println(p1.toString());
                 data1.println(p2.toString());
                 data2.println(p1.toString());
@@ -136,25 +139,58 @@ public class Engine {
                 }
                 client1.gameTurn();
                 client2.gameTurn();
-                processBattleRound(input1, hand1, side1, deck1, support);
-                processBattleRound(input2, hand2, side2, deck2, support);
+                processBattleRound(input1, p1, p2, hand1, side1, deck1, side2, support);
+                processBattleRound(input2, p1, p2, hand2, side2, deck2, side1, support);
+                if(maxMana < support.maximumMana()) {
+                    p1.mana = maxMana;
+                    p2.mana = maxMana;
+                }
                 break;
             }
         } finally {
         }
     }
 
-    private void processBattleRound(Scanner scanner, List<Player.Card> hand,
+    private void processBattleRound(Scanner scanner, Player.Actor player1,
+                                    Player.Actor player2, List<Player.Card> hand,
                                     List<Player.Card> side, List<Player.Card> deck,
-                                    Player.GameSupport support) {
+                                    List<Player.Card> other, Player.GameSupport support) {
         String line = scanner.nextLine();
         if(line.trim().isEmpty()) {
             line = scanner.nextLine();
         }
         String[] commands = line.toLowerCase().split("\\s+;\\s+");
+        String[] tokens;
+        int id1, id2;
+        List<Player.Card> summoned = new ArrayList<>();
+        List<Player.Card> enemyWardsUsed = new ArrayList<>();
         for(String command: commands) {
             if (command.startsWith("summon")) {
-
+                tokens = command.split("\\s+", 3);
+                if(tokens.length < 2) {
+                    throw new IllegalArgumentException("SUMMON requires id");
+                }
+                id1 = Integer.parseInt(tokens[1]);
+                for(Player.Card c: hand) {
+                    if(c.id == id1 && player1.mana >= c.cost && countSideCreatures(side) < support.maxCreatures()) {
+                        player1.mana -= c.cost;
+                        side.add(c);
+                        hand.remove(c);
+                        if(!c.hasAbility("C")) {
+                            summoned.add(c);
+                        }
+                    } else if(c.id == id1) {
+                        System.err.println("Could not summon creature " + id1 + " due to constraints");
+                        if(player1.mana < c.cost) {
+                            System.err.println("Mana too low: " + c.cost + " > " + player1.mana);
+                        } else if(countSideCreatures(side) >= support.maxCreatures()) {
+                            System.err.println("Maximum creatures (" + support.maxCreatures() + ") already summoned");
+                        }
+                    }
+                }
+                if(tokens.length > 2) {
+                    System.err.println(tokens[2]);
+                }
             } else if (command.startsWith("attack")) {
 
             } else if (command.startsWith("use")) {
@@ -168,6 +204,14 @@ public class Engine {
                 throw new IllegalArgumentException("Invalid command: " + command);
             }
         }
+    }
+
+    private int countSideCreatures(List<Player.Card> side) {
+        int n = 0;
+        for(Player.Card c: side) {
+            n += c.type == Player.Card.TYPE_CREATURE ? 1 : 0;
+        }
+        return n;
     }
 
     public Player.Card processDraftRound(Scanner scanner, int id, List<Player.Card> draftChoice, Player.GameSupport support) {

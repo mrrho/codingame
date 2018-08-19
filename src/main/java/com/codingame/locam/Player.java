@@ -578,6 +578,10 @@ class Player {
                     " " + cost + " " + attack + " " + defense + " " +
                     abilities + " " + playerHp + " " + enemyHp + " " + cardDraw;
         }
+
+        public boolean hasAbility(String ability) {
+            return this.abilities.contains(ability);
+        }
     }
 
     static class CardFactory {
