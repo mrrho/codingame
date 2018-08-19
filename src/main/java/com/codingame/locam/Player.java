@@ -429,7 +429,7 @@ class Player {
                     break;
                 }
             }
-            if (ma == null) {
+            if (ma == null || ma.actions.isEmpty()) {
                 return PassAction.INSTANCE;
             } else {
                 return ma;
@@ -663,6 +663,7 @@ class Player {
             for (int i = 1; i < actions.size(); ++i) {
                 sb.append(';').append(actions.get(i).toString());
             }
+            sb.append('\n');
             return sb.toString();
         }
     }

@@ -54,8 +54,8 @@ public class Engine {
             if (support.deckSize() * support.draftCount() > availables.size() && support.uniqueCards()) {
                 throw new RuntimeException("Not enough cards");
             }
-            List<Player.Card> deck1Cards = new ArrayList<>();
-            List<Player.Card> deck2Cards = new ArrayList<>();
+            List<Player.Card> deck1 = new ArrayList<>();
+            List<Player.Card> deck2 = new ArrayList<>();
             List<Player.Card> draftChoice = new ArrayList<>();
             for (int i = 0; i < support.deckSize(); ++i) {
                 System.err.println("Engine printing");
@@ -80,21 +80,21 @@ public class Engine {
                 client1.gameTurn();
                 client2.gameTurn();
 
-                deck1Cards.add(processDraftRound(input1, deck1Cards.size(), draftChoice, support));
-                deck2Cards.add(processDraftRound(input2, deck2Cards.size(), draftChoice, support));
+                deck1.add(processDraftRound(input1, deck1.size(), draftChoice, support));
+                deck2.add(processDraftRound(input2, deck2.size(), draftChoice, support));
                 draftChoice.clear();
             }
             // playerXCards are the total number of cards for each layer
-            Collections.shuffle(deck1Cards);
-            Collections.shuffle(deck2Cards);
+            Collections.shuffle(deck1);
+            Collections.shuffle(deck2);
             // handX are the cards drawable by the player
             List<Player.Card> hand1 = new ArrayList<>();
             List<Player.Card> hand2 = new ArrayList<>();
             for (int i = 0; i < support.firstPlayerHandSize(); i++) {
-                hand1.add(deck1Cards.remove(0));
+                hand1.add(deck1.remove(0));
             }
             for (int i = 0; i < support.secondPlayerHandSize(); i++) {
-                hand2.add(deck2Cards.remove(0));
+                hand2.add(deck2.remove(0));
             }
             // sideX are the cards in play
             List<Player.Card> side1 = new ArrayList<>();
@@ -104,9 +104,69 @@ public class Engine {
                 data1.println(p2.toString());
                 data2.println(p1.toString());
                 data2.println(p2.toString());
-
+                data1.println(hand2.size());
+                data2.println(hand1.size());
+                data1.println(hand1.size() + side1.size() + side2.size());
+                data2.println(hand2.size() + side1.size() + side2.size());
+                for (Player.Card c: hand1) {
+                    data1.println(String.format("%d %d 0 %d %d %d %d %s %d %d %d",
+                            c.number, c.id, c.type, c.cost, c.attack, c.defense,
+                            c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
+                }
+                for (Player.Card c: hand2) {
+                    data2.println(String.format("%d %d 0 %d %d %d %d %s %d %d %d",
+                            c.number, c.id, c.type, c.cost, c.attack, c.defense,
+                            c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
+                }
+                for(Player.Card c: side1) {
+                    data1.println(String.format("%d %d 1 %d %d %d %d %s %d %d %d",
+                            c.number, c.id, c.type, c.cost, c.attack, c.defense,
+                            c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
+                    data2.println(String.format("%d %d -1 %d %d %d %d %s %d %d %d",
+                            c.number, c.id, c.type, c.cost, c.attack, c.defense,
+                            c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
+                }
+                for(Player.Card c: side2) {
+                    data2.println(String.format("%d %d 1 %d %d %d %d %s %d %d %d",
+                            c.number, c.id, c.type, c.cost, c.attack, c.defense,
+                            c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
+                    data1.println(String.format("%d %d -1 %d %d %d %d %s %d %d %d",
+                            c.number, c.id, c.type, c.cost, c.attack, c.defense,
+                            c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
+                }
+                client1.gameTurn();
+                client2.gameTurn();
+                processBattleRound(input1, hand1, side1, deck1, support);
+                processBattleRound(input2, hand2, side2, deck2, support);
+                break;
             }
         } finally {
+        }
+    }
+
+    private void processBattleRound(Scanner scanner, List<Player.Card> hand,
+                                    List<Player.Card> side, List<Player.Card> deck,
+                                    Player.GameSupport support) {
+        String line = scanner.nextLine();
+        if(line.trim().isEmpty()) {
+            line = scanner.nextLine();
+        }
+        String[] commands = line.toLowerCase().split("\\s+;\\s+");
+        for(String command: commands) {
+            if (command.startsWith("summon")) {
+
+            } else if (command.startsWith("attack")) {
+
+            } else if (command.startsWith("use")) {
+
+            } else if (command.startsWith("pass")) {
+                // nothing to do
+                break;
+            } else if(command.trim().isEmpty()) {
+                throw new IllegalArgumentException("No command specified - use pass");
+            } else {
+                throw new IllegalArgumentException("Invalid command: " + command);
+            }
         }
     }
 
