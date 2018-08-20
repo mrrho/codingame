@@ -223,7 +223,7 @@ class Player {
     }
 
     public static void main(String args[]) {
-        GameSupport support = new Wood3GameSupport();
+        GameSupport support = new BronzeGameSupport();
         Player game = new Player(support, System.in, System.out, new ArtificialIntelligence(support), null, null);
         game.run();
     }
@@ -262,7 +262,7 @@ class Player {
             int draw = s.nextInt();
             inPlay.add(CardFactory.createCard(type, number, id, location, cost, attack, defense, abilities, playerHp, enemyHp, draw));
             if (board.phase != Board.PHASE_DRAFT) {
-                System.err.println("Card: #" + number + " id:" + id + " loc:" + location + " cost:" + cost + " atk:" + attack + " def:" + defense);
+                System.err.println("Card: #" + number + " id:" + id + " loc:" + location + " cost:" + cost + " atk:" + attack + " def:" + defense + " " + inPlay.get(inPlay.size() - 1).getClass().getSimpleName());
             }
         }
         System.err.println("Player playing, read " + cardCount);
@@ -486,6 +486,7 @@ class Player {
         int deck;
         int runes;
         int lowestHealth;
+        int draws;
         GameSupport support;
 
         public void initialize(int health, int mana, int deck, int runes, GameSupport support) {
@@ -502,19 +503,22 @@ class Player {
             return "" + health + " " + mana + " " + deck + " " + runes;
         }
 
-        public void takeDamage(int attack) {
-            int h1 = health;
-            int h2 = health - attack;
-            if(h2 < lowestHealth) {
+        public void adjustHealth(int adjustment) {
+            int newHealth = health + adjustment;
+            if(newHealth < lowestHealth) {
                 int[] thresholds = support.playerRunes();
                 for(int i = 0; i < thresholds.length; ++i) {
-                    if(thresholds[i] > h2 && thresholds[i] <= lowestHealth) {
+                    if(thresholds[i] > newHealth && thresholds[i] <= lowestHealth) {
                         ++this.runes;
                     }
                 }
-                lowestHealth = h2;
+                lowestHealth = newHealth;
             }
-            health = h2;
+            health = newHealth;
+        }
+
+        public void addDraws(int draw) {
+            this.draws = draw;
         }
     }
 

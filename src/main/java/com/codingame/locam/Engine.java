@@ -23,7 +23,7 @@ public class Engine {
             in2 = new InputOutputStream();
             out1 = new InputOutputStream();
             out2 = new InputOutputStream();
-            Player.GameSupport support = new Player.Wood3GameSupport();
+            Player.GameSupport support = new Player.BronzeGameSupport();
             String dw1 = null, dw2 = null, bw1 = null, bw2 = null;
             Player client1 = new Player(support, in1.getInputStream(), new PrintStream(out1.getOutputStream()), new Player.ArtificialIntelligence(support), dw1, bw1);
             Player client2 = new Player(support, in2.getInputStream(), new PrintStream(out2.getOutputStream()), new Player.ArtificialIntelligence(support), dw2, bw2);
@@ -139,7 +139,7 @@ public class Engine {
                 client1.gameTurn();
                 client2.gameTurn();
                 processBattleRound(input1, p1, p2, hand1, side1, deck1, side2, support);
-                processBattleRound(input2, p1, p2, hand2, side2, deck2, side1, support);
+                processBattleRound(input2, p2, p1, hand2, side2, deck2, side1, support);
                 if (maxMana < support.maximumMana()) {
                     p1.mana = maxMana;
                     p2.mana = maxMana;
@@ -170,8 +170,10 @@ public class Engine {
                     continue;
                 }
                 id1 = Integer.parseInt(tokens[1]);
-                for(int i = 0; i < hand.size(); ++i) {
-                    Player.Card c = hand.get(i);
+                Player.Card c = fetchCard(id1, hand);
+                if(c == null) {
+                    System.err.println("Invalid creature id: " + id1);
+                }
                     if (c.id == id1 && player1.mana >= c.cost && countSideCreatures(side) < support.maxCreatures()) {
                         player1.mana -= c.cost;
                         side.add(c);
@@ -189,7 +191,6 @@ public class Engine {
                         }
                         break;
                     }
-                }
                 if (tokens.length > 2) {
                     System.err.println(tokens[2]);
                 }
@@ -204,7 +205,7 @@ public class Engine {
                 Player.Card o;
                 for (Player.Card c : side) {
                     if (c.id == id1 && c.type == Player.Card.TYPE_CREATURE && !summoned.contains(c)) {
-                        o = fetchOpponent(id2, other);
+                        o = fetchCard(id2, other);
                         if (hasAbility(support.allowedAbilities(), "G") && opponentHasGuards(other) && !hasAbility(o.abilities, "G")) {
                             System.err.println("Opponent has live Guard creature(s) in play but one of them wasn't attacked");
                             continue;
@@ -214,9 +215,9 @@ public class Engine {
                                 System.err.println("Opponent hit: " + c.attack + ", " + player2.health + " hp left");
                                 if(c.hasAbility("D")) {
                                     System.err.println("" + c.attack + " drained hp added to player");
-                                    player1.health += c.attack;
+                                    player1.adjustHealth(c.attack);
                                 }
-                                player2.takeDamage(c.attack);
+                                player2.adjustHealth(c.attack);
                             } else {
                                 System.err.println("Invalid attack target id: " + id2);
                             }
@@ -226,13 +227,13 @@ public class Engine {
                         } else {
                             if(c.hasAbility("D")) {
                                 System.err.println("" + (c.attack > o.defense ? o.defense : c.attack) + " drained hp added to player");
-                                player1.health += c.attack > o.defense ? o.defense : c.attack;
+                                player1.adjustHealth(c.attack > o.defense ? o.defense : c.attack);
                             }
                             if(c.hasAbility("L")) {
                                 if(c.hasAbility("B")) {
                                     if(c.attack > o.defense) {
                                         System.err.println("Breakthrough hit opponent for " + (c.attack - o.defense) + " hp");
-                                        player2.takeDamage(c.attack - o.defense);
+                                        player2.adjustHealth(o.defense - c.attack);
                                     }
                                 }
                                 System.err.println("Creature " + id2 + " hit lethally for " + o.defense + " hp damage");
@@ -251,8 +252,81 @@ public class Engine {
                         }
                     }
                 }
+                if(tokens.length > 3) {
+                    System.err.println(tokens[3]);
+                }
             } else if (command.startsWith("use")) {
-
+                tokens = command.split("\\s+", 4);
+                if(tokens.length < 3) {
+                    System.err.println("Malformed attack (USE id1 id2|-1): " + command);
+                    continue;
+                }
+                id1 = Integer.parseInt(tokens[1]);
+                id2 = Integer.parseInt(tokens[2]);
+                Player.Card o;
+                Player.Card c;
+                c = fetchCard(id1, hand);
+                if(c == null) {
+                    System.err.println("Invalid item id: " + id1);
+                    continue;
+                }
+                o = fetchCard(id2, side);
+                if(o == null) {
+                    o = fetchCard(id2, other);
+                }
+                if(o == null && id2 != -1) {
+                    System.err.println("Invalid target id: " + id2);
+                    continue;
+                }
+                if(o != null && o.type != Player.Card.TYPE_CREATURE) {
+                    System.err.println("Target is not a creature: " + id2);
+                    continue;
+                }
+                if(c.type == Player.Card.TYPE_CREATURE) {
+                    System.err.println("Card specified is not an item");
+                    continue;
+                }
+                if(c.playerHp != 0) {
+                    System.err.println("Item heals player for " + c.playerHp + " hp");
+                    player1.adjustHealth(c.playerHp);
+                }
+                if(c.enemyHp > 0) {
+                    System.err.println("Item damages opponent for " + c.enemyHp + " hp");
+                    player2.adjustHealth(c.enemyHp);
+                }
+                if(c.cardDraw != 0) {
+                    System.err.println("Item adds " + c.cardDraw + " draws to the next round");
+                    player1.addDraws(c.cardDraw);
+                }
+                if(o != null) {
+                    StringBuilder sb = new StringBuilder();
+                    if(c.type == Player.Card.TYPE_ITEM_RED) {
+                        sb.append(c.hasAbility("B") ? '-' : o.abilities.charAt(0));
+                        sb.append(c.hasAbility("C") ? '-' : o.abilities.charAt(1));
+                        sb.append(c.hasAbility("D") ? '-' : o.abilities.charAt(2));
+                        sb.append(c.hasAbility("G") ? '-' : o.abilities.charAt(3));
+                        sb.append(c.hasAbility("L") ? '-' : o.abilities.charAt(4));
+                        sb.append(c.hasAbility("W") ? '-' : o.abilities.charAt(5));
+                    } else {
+                        sb.append(c.hasAbility("B") ? 'B' : o.abilities.charAt(0));
+                        sb.append(c.hasAbility("C") ? 'C' : o.abilities.charAt(1));
+                        sb.append(c.hasAbility("D") ? 'D' : o.abilities.charAt(2));
+                        sb.append(c.hasAbility("G") ? 'G' : o.abilities.charAt(3));
+                        sb.append(c.hasAbility("L") ? 'L' : o.abilities.charAt(4));
+                        sb.append(c.hasAbility("W") ? 'W' : o.abilities.charAt(5));
+                    }
+                    o.abilities = sb.toString();
+                    o.attack += c.attack;
+                    if(c.defense < 0 && o.hasAbility("W")) {
+                        o.abilities = o.abilities.substring(0, 5) + "-";
+                    } else {
+                        o.defense += c.defense;
+                    }
+                }
+                hand.remove(c);
+                if(tokens.length > 3) {
+                    System.err.println(tokens[3]);
+                }
             } else if (command.startsWith("pass")) {
                 // nothing to do
                 break;
@@ -277,7 +351,7 @@ public class Engine {
         return abilities.contains(ability);
     }
 
-    private Player.Card fetchOpponent(int id, List<Player.Card> other) {
+    private Player.Card fetchCard(int id, List<Player.Card> other) {
         for (Player.Card o : other) {
             if (o.id == id) {
                 return o;
