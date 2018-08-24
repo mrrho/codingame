@@ -25,8 +25,20 @@ public class Engine {
             out2 = new InputOutputStream();
             Player.GameSupport support = new Player.BronzeGameSupport();
             String dw1 = null, dw2 = null, bw1 = null, bw2 = null;
-            Player client1 = new Player(support, in1.getInputStream(), new PrintStream(out1.getOutputStream()), new Player.ArtificialIntelligence(support), dw1, bw1);
-            Player client2 = new Player(support, in2.getInputStream(), new PrintStream(out2.getOutputStream()), new Player.ArtificialIntelligence(support), dw2, bw2);
+            Player client1 = new Player(support, in1.getInputStream(), new PrintStream(out1.getOutputStream()),
+                    new Player.ArtificialIntelligence(support, new double[] {
+                            0, 1, 1, 0.5, 1, 0.5, 0.75, 1, 1, 0.25, 1.0, 0.33,
+                            0, 1, 1, 0.5, 1, 0.5, 0.75, 1, 1, 0.25, 1.0, 0.33,
+                            0, 1, 1, 0.5, 1, 0.5, 0.75, 1, 1, 0.25, 1.0, 0.33,
+                            0, 1, 1, 0.5, 1, 0.5, 0.75, 1, 1, 0.25, 1.0, 0.33
+                    }));
+            Player client2 = new Player(support, in2.getInputStream(), new PrintStream(out2.getOutputStream()),
+                    new Player.ArtificialIntelligence(support, new double[] {
+                            0, 1, 0.5, 1, 0.5, 1, 1, 0.75, 0.25, 1.0, 0.5, 1.0,
+                            0, 1, 0.5, 1, 0.5, 1, 1, 0.75, 0.25, 1.0, 0.5, 1.0,
+                            0, 1, 0.5, 1, 0.5, 1, 1, 0.75, 0.25, 1.0, 0.5, 1.0,
+                            0, 1, 0.5, 1, 0.5, 1, 1, 0.75, 0.25, 1.0, 0.5, 1.0
+                    }));
 
             PrintStream data1 = new PrintStream(in1.getOutputStream()), data2 = new PrintStream(in2.getOutputStream());
             Scanner input1 = new Scanner(out1.getInputStream()),
@@ -56,8 +68,9 @@ public class Engine {
             List<Player.Card> deck1 = new ArrayList<>();
             List<Player.Card> deck2 = new ArrayList<>();
             List<Player.Card> draftChoice = new ArrayList<>();
+            System.err.println("\n\n***DRAFT STAGE***\n");
+            System.err.println("---Engine start---");
             for (int i = 0; i < support.deckSize(); ++i) {
-                System.err.println("Engine printing");
                 data1.println(p1.toString());
                 data1.println(p2.toString());
                 data2.println(p1.toString());
@@ -73,16 +86,20 @@ public class Engine {
                     data1.println(c.toString());
                     data2.println(c.toString());
                 }
-                System.err.println("Engine Printed");
                 availables.addAll(draftChoice);
-
+                System.err.println("---Engine end---");
+                System.err.println("---Player 1 start---");
                 client1.gameTurn();
+                System.err.println("---Player 1 end---");
+                System.err.println("---Player 2 start---");
                 client2.gameTurn();
-
+                System.err.println("---Player 2 end---");
+                System.err.println("---Engine start---");
                 deck1.add(processDraftRound(input1, deck1.size(), draftChoice, support));
                 deck2.add(processDraftRound(input2, deck2.size(), draftChoice, support));
                 draftChoice.clear();
             }
+            System.err.println("---Engine ends---");
             // playerXCards are the total number of cards for each layer
             Collections.shuffle(deck1);
             Collections.shuffle(deck2);
@@ -99,6 +116,14 @@ public class Engine {
             List<Player.Card> side1 = new ArrayList<>();
             List<Player.Card> side2 = new ArrayList<>();
             int maxMana = support.startingMana();
+            if(input1.hasNextLine()) {
+                input1.nextLine();
+            }
+            if(input2.hasNextLine()) {
+                input2.nextLine();
+            }
+            System.err.println("\n\n***BATTLE STAGE***\n");
+            System.err.println("---Engine starts---");
             for (; ; ) {
                 p1.mana = maxMana;
                 p2.mana = maxMana;
@@ -136,16 +161,48 @@ public class Engine {
                             c.number, c.id, c.type, c.cost, c.attack, c.defense,
                             c.abilities, c.playerHp, c.enemyHp, c.cardDraw));
                 }
+                System.err.println("---Engine ends---");
+                System.err.println("---Player 1 starts---");
                 client1.gameTurn();
+                System.err.println("---Player 1 ends---");
+                System.err.println("---Player 2 starts---");
                 client2.gameTurn();
+                System.err.println("---Player 2 ends---");
+                System.err.println("---Engine starts---");
                 processBattleRound(input1, p1, p2, hand1, side1, deck1, side2, support);
                 processBattleRound(input2, p2, p1, hand2, side2, deck2, side1, support);
                 if (maxMana < support.maximumMana()) {
-                    p1.mana = maxMana;
-                    p2.mana = maxMana;
+                    ++maxMana;
                 }
-                break;
+                for(int i = 0; i < side1.size(); ++i) {
+                    if(side1.get(i).defense <= 0) {
+                        System.err.println("Defeated creature " + side1.get(i).id + " removed from first side");
+                        side1.remove(i--);
+                    }
+                }
+                for(int i = 0; i < side2.size(); ++i) {
+                    if(side2.get(i).defense <= 0) {
+                        System.err.println("Defeated creature " + side2.get(i).id + " removed from second side");
+                        side2.remove(i--);
+                    }
+                }
+                if(p1.health <= 0 && p2.health <= 0) {
+                    data1.println("DRAW!");
+                    data2.println("DRAW!");
+                } else if(p1.health <= 0) {
+                    data2.println("VICTORY!");
+                    data1.println("DEFEAT!");
+                } else if(p2.health <= 0) {
+                    data1.println("VICTORY!");
+                    data2.println("DEFEAT!");
+                }
+                if(p1.health <= 0 || p2.health <= 0) {
+                    System.err.println("Victory condition met");
+                    break;
+                }
+//                break;
             }
+            System.err.println("---Engine ends---");
         } finally {
         }
     }
@@ -158,7 +215,7 @@ public class Engine {
         if (line.trim().isEmpty()) {
             line = scanner.nextLine();
         }
-        String[] commands = line.toLowerCase().split("\\s+;\\s+");
+        String[] commands = line.toLowerCase().split("\\s*;\\s*");
         String[] tokens;
         int id1, id2;
         List<Player.Card> summoned = new ArrayList<>();
