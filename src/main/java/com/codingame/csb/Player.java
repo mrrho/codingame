@@ -9,6 +9,8 @@ class Player {
     private final InputStream is;
     private final PrintStream os;
     private final PrintStream es;
+    int px = -1, py = -1;
+    int dx = -1, dy = -1;
     Scanner s;
 
     public Player(GameSupport support, InputStream is, PrintStream os, PrintStream es) {
@@ -38,7 +40,16 @@ class Player {
         } else {
             input.calcDistanceAndAngle();
         }
-        int acc = (int) calcAcceleration(input);
+        if(dx == -1) {
+            dx = input.nx;
+            dy = input.ny;
+        } else if(input.nx != dx) {
+            px = dx;
+            py = dy;
+            dx = input.nx;
+            dy = input.ny;
+        }
+        int acc = calcAcceleration(input);
         es.println(String.format("%d %d %d %d %d %d %d %d %d", input.x, input.y, input.nx, input.ny, input.d, input.angle, input.ox, input.oy, acc));
         os.println("" + input.nx + " " + input.ny + " " + acc);
     }
@@ -46,7 +57,11 @@ class Player {
     private int calcAcceleration(Input input) {
         // 600 : -3
         // 1200 : 3
-        double rem = ((double) input.d - 600.) / 600. - 1.;
+        double dn = Math.sqrt((dx - input.x)*(dx - input.x) + (dy - input.y)*(dy - input.y));
+//        double dp = Math.sqrt((px - input.x)*(px - input.x) + (py - input.y)*(py - input.y));
+        double dp = 50000.;
+        double d = Math.min(dn, dp);
+        double rem = (d - 600.) / 600. - 1.;
         double a = rem < 3 ? 100. / (1. + Math.exp(-rem)) : 100;
         return (int) a;
     }
