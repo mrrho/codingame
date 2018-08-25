@@ -10,7 +10,6 @@ class Player {
     private final PrintStream os;
     private final PrintStream es;
     int px = -1, py = -1;
-    int dx = -1, dy = -1;
     Scanner s;
 
     public Player(GameSupport support, InputStream is, PrintStream os, PrintStream es) {
@@ -40,28 +39,42 @@ class Player {
         } else {
             input.calcDistanceAndAngle();
         }
-        if(dx == -1) {
-            dx = input.nx;
-            dy = input.ny;
-        } else if(input.nx != dx) {
-            px = dx;
-            py = dy;
-            dx = input.nx;
-            dy = input.ny;
+        double thd;
+        double dx, dy, dxd, dyd;
+        int nx, ny;
+        double l0, l1;
+        if(px != -1) {
+            dx = input.x - px;
+            dy = -input.y + py;
+            l0 = Math.sqrt(dx * dx + dy * dy);
+            es.println(String.format("%f %f", dx, dy));
+            dxd = input.nx - input.x;
+            dyd = -input.ny + input.y;
+            l1 = Math.sqrt(dxd * dxd + dyd * dyd);
+            thd = Math.acos((dx * dxd + dy * dyd) / l0 / l1);
+            thd *= 1.2;
+            es.println(String.format("%f %f %f", dxd, dyd, thd));
+            dxd = dx * Math.cos(thd) - dy * Math.sin(thd);
+            dyd = dy * Math.sin(thd) + dy * Math.cos(thd);
+            es.println(String.format("%f %f", dxd, dyd));
+            nx = input.x + (int) (dxd);
+            ny = input.y + (int) (dyd);
+            es.println(String.format("%d %d", nx, ny));
+        } else {
+            nx = input.nx;
+            ny = input.ny;
         }
+        px = input.x;
+        py = input.y;
         int acc = calcAcceleration(input);
         es.println(String.format("%d %d %d %d %d %d %d %d %d", input.x, input.y, input.nx, input.ny, input.d, input.angle, input.ox, input.oy, acc));
-        os.println("" + input.nx + " " + input.ny + " " + acc);
+        os.println("" + nx + " " + ny + " " + acc);
     }
 
     private int calcAcceleration(Input input) {
         // 600 : -3
         // 1200 : 3
-        double dn = Math.sqrt((dx - input.x)*(dx - input.x) + (dy - input.y)*(dy - input.y));
-//        double dp = Math.sqrt((px - input.x)*(px - input.x) + (py - input.y)*(py - input.y));
-        double dp = 50000.;
-        double d = Math.min(dn, dp);
-        double rem = (d - 600.) / 600. - 1.;
+        double rem = (input.d - 600.) / 600. - 1.;
         double a = rem < 3 ? 100. / (1. + Math.exp(-rem)) : 100;
         return (int) a;
     }
