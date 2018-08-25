@@ -39,36 +39,44 @@ class Player {
         } else {
             input.calcDistanceAndAngle();
         }
-        double thd;
+        Vector current;
+        Vector desired;
+        Vector output;
+        float thd, tha;
         double dx, dy, dxd, dyd;
         int nx, ny;
-        double l0, l1;
+        float orient;
+        float acc = 100.f;
+        float a1 = 50.f; float a2 = 100.f - a1;
+        float p1 = (float) (0.333333 * Math.PI), p2 = (float) (0.666667 * Math.PI);
         if(px != -1) {
-            dx = input.x - px;
-            dy = -input.y + py;
-            l0 = Math.sqrt(dx * dx + dy * dy);
-            es.println(String.format("%f %f", dx, dy));
-            dxd = input.nx - input.x;
-            dyd = -input.ny + input.y;
-            l1 = Math.sqrt(dxd * dxd + dyd * dyd);
-            thd = Math.acos((dx * dxd + dy * dyd) / l0 / l1);
-            thd *= 1.2;
-            es.println(String.format("%f %f %f", dxd, dyd, thd));
-            dxd = dx * Math.cos(thd) - dy * Math.sin(thd);
-            dyd = dy * Math.sin(thd) + dy * Math.cos(thd);
-            es.println(String.format("%f %f", dxd, dyd));
-            nx = input.x + (int) (dxd);
-            ny = input.y + (int) (dyd);
-            es.println(String.format("%d %d", nx, ny));
+            current = new Vector(input.x - px, input.y - py).normalize();
+            es.println("Current: " + current);
+            desired = new Vector(input.nx - input.x, input.ny - input.y).normalize();
+            es.println("Desired: " + desired);
+            thd = (float) Math.acos(current.dot(desired));
+            orient = current.cross(desired);
+            tha = Math.abs(thd);
+            es.println(String.format("Angle: %f", 180. * tha / Math.PI));
+            acc = tha < p1 ? 100.f : tha > p2 ? a1 : ((p2 - tha) * (a2 - a1) / (p2 - p1) + a1);
+            thd = orient >= 0 ? thd : -thd;
+            thd *= 1.25;
+            if(thd > Math.PI) {
+                thd = (float) Math.PI;
+            }
+            output = current.rotate(thd);
+            es.println(String.format("o,th,or: %s %f %f", output, thd, orient));
+            nx = input.x + (int)(output.x * 100.f);
+            ny = input.y + (int)(output.y * 100.f);
+            es.println(String.format("nx,ny,acc: %d %d %.3f", nx, ny, acc));
         } else {
             nx = input.nx;
             ny = input.ny;
         }
         px = input.x;
         py = input.y;
-        int acc = calcAcceleration(input);
-        es.println(String.format("%d %d %d %d %d %d %d %d %d", input.x, input.y, input.nx, input.ny, input.d, input.angle, input.ox, input.oy, acc));
-        os.println("" + nx + " " + ny + " " + acc);
+        es.println(String.format("%d %d %d %d %d %d %d %d %d", input.x, input.y, input.nx, input.ny, input.d, input.angle, input.ox, input.oy, (int)acc));
+        os.println("" + nx + " " + ny + " " + (int) acc);
     }
 
     private int calcAcceleration(Input input) {
@@ -77,6 +85,45 @@ class Player {
         double rem = (input.d - 600.) / 600. - 1.;
         double a = rem < 3 ? 100. / (1. + Math.exp(-rem)) : 100;
         return (int) a;
+    }
+
+    static class Vector {
+        final float x, y;
+        final float l;
+
+        public Vector(int x, int y) {
+            this.x = x;
+            this.y = y;
+            this.l = (float) Math.sqrt(this.x * this.x + this.y * this.y);
+        }
+
+        public Vector(float x, float y) {
+            this.x = x;
+            this.y = y;
+            this.l = (float) Math.sqrt(this.x * this.x + this.y * this.y);
+        }
+
+        public Vector normalize() {
+            return new Vector(this.x / this.l, this.y / this.l);
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%.3f %.3f", this.x, this.y);
+        }
+
+        public float cross(Vector v) {
+            return this.x * v.y - this.y * v.x;
+        }
+
+        public double dot(Vector v) {
+            return this.x * v.x + this.y * v.y;
+        }
+
+        public Vector rotate(float theta) {
+            return new Vector((float)(this.x * Math.cos(theta) - this.y * Math.sin(theta)),
+                    (float)(this.x * Math.sin(theta) + this.y * Math.cos(theta)));
+        }
     }
 
     static class Input {
