@@ -1,5 +1,4 @@
-# Auto-generated code below aims at helping you parse
-# the standard input according to the problem statement.
+#!/usr/bin/env bash
 
 ord() {
     echo `expr index "ABCDEFGHIJKLMNOPQRSTUVWXYZ" $1`
