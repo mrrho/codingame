@@ -47,35 +47,37 @@ class Player {
         int nx, ny;
         float orient;
         float acc = 100.f;
-        float a1 = 50.f; float a2 = 100.f - a1;
-        float p1 = (float) (0.333333 * Math.PI), p2 = (float) (0.666667 * Math.PI);
+        float a1 = 70.f;
+        float p1 = (float) (0.60 * Math.PI), p2 = (float) (1.0 * Math.PI);
         if(px != -1) {
             current = new Vector(input.x - px, input.y - py).normalize();
-            es.println("Current: " + current);
+//            es.println("Current: " + current);
             desired = new Vector(input.nx - input.x, input.ny - input.y).normalize();
-            es.println("Desired: " + desired);
+//            es.println("Desired: " + desired);
             thd = (float) Math.acos(current.dot(desired));
             orient = current.cross(desired);
             tha = Math.abs(thd);
-            es.println(String.format("Angle: %f", 180. * tha / Math.PI));
-            acc = tha < p1 ? 100.f : tha > p2 ? a1 : ((p2 - tha) * (a2 - a1) / (p2 - p1) + a1);
+//            es.println(String.format("Angle: %.3f %.3f %.3f %.3f", 180. * tha / Math.PI, tha, p1, p2));
+            acc = tha < p1 ? 100.f : tha > p2 ? a1 : ((p2 - tha) * (100f - a1) / (p2 - p1) + a1);
             thd = orient >= 0 ? thd : -thd;
-            thd *= 1.25;
-            if(thd > Math.PI) {
-                thd = (float) Math.PI;
+            thd *= 1.20;
+            if(thd >= Math.PI - 0.02) {
+                thd = (float) Math.PI - 0.02f;
+            } else if(thd <= -Math.PI + 0.02) {
+                thd = (float) -Math.PI + 0.02f;
             }
             output = current.rotate(thd);
-            es.println(String.format("o,th,or: %s %f %f", output, thd, orient));
+//            es.println(String.format("o,th,or: %s %f %f", output, thd, orient));
             nx = input.x + (int)(output.x * 100.f);
             ny = input.y + (int)(output.y * 100.f);
-            es.println(String.format("nx,ny,acc: %d %d %.3f", nx, ny, acc));
+//            es.println(String.format("nx,ny,acc: %d %d %.3f", nx, ny, acc));
         } else {
             nx = input.nx;
             ny = input.ny;
         }
         px = input.x;
         py = input.y;
-        es.println(String.format("%d %d %d %d %d %d %d %d %d", input.x, input.y, input.nx, input.ny, input.d, input.angle, input.ox, input.oy, (int)acc));
+        es.println(String.format("%d %d %d %d %d %d %d %d %d %d %d", input.x, input.y, input.nx, input.ny, input.d, input.angle, input.ox, input.oy, (int)acc, nx, ny));
         os.println("" + nx + " " + ny + " " + (int) acc);
     }
 
